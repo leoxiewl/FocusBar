@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import Sparkle
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
 
@@ -8,6 +9,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     var panelController: PanelController!
     var statusItem: NSStatusItem!
     var settingsWindow: NSWindow?
+
+    // Sparkle 更新控制器（必须持有引用，否则会被释放）
+    let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true,
+        updaterDelegate: nil,
+        userDriverDelegate: nil
+    )
 
     private var globalMouseMonitor: Any?
     private var localMouseMonitor: Any?
@@ -40,7 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
-    // MARK: - Status Item (menu bar icon)
+    // MARK: - Status Item
 
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
@@ -51,9 +59,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let menu = NSMenu()
         menu.addItem(NSMenuItem(title: "设置…", action: #selector(openSettings), keyEquivalent: ","))
+
+        let checkItem = NSMenuItem(title: "检查更新…", action: #selector(checkForUpdates), keyEquivalent: "")
+        menu.addItem(checkItem)
+
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "退出 FocusBar", action: #selector(quitApp), keyEquivalent: "q"))
         statusItem.menu = menu
+    }
+
+    @objc func checkForUpdates() {
+        updaterController.checkForUpdates(nil)
     }
 
     @objc private func openSettings() {
@@ -62,9 +78,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             NSApp.activate(ignoringOtherApps: true)
             return
         }
-        let view = SettingsView(store: store)
+        let view = SettingsView(store: store, updater: updaterController.updater)
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 480, height: 320),
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 340),
             styleMask: [.titled, .closable, .miniaturizable],
             backing: .buffered,
             defer: false

@@ -1,14 +1,15 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 struct SettingsView: View {
     @ObservedObject var store: MarkdownStore
+    let updater: SPUUpdater
     @State private var directoryPath: String = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
 
-            // 标题
             Text("FocusBar 设置")
                 .font(.title2.bold())
 
@@ -65,19 +66,41 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
+            Divider()
+
+            // 更新
+            VStack(alignment: .leading, spacing: 8) {
+                Label("更新", systemImage: "arrow.down.circle")
+                    .font(.headline)
+
+                HStack {
+                    Button("检查更新…") {
+                        updater.checkForUpdates()
+                    }
+                    .buttonStyle(.bordered)
+
+                    Text("当前版本 v\(appVersion)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+
             Spacer()
 
-            // 版本
             HStack {
                 Spacer()
-                Text("FocusBar v1.0")
+                Text("FocusBar v\(appVersion)")
                     .font(.caption2)
                     .foregroundColor(.secondary)
             }
         }
         .padding(24)
-        .frame(width: 480, height: 320)
+        .frame(width: 480, height: 380)
         .onAppear { directoryPath = store.storageDirectory.path }
+    }
+
+    private var appVersion: String {
+        Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.1.0"
     }
 
     private var storedFileCount: Int {
