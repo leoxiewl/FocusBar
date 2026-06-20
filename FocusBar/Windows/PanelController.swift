@@ -23,7 +23,8 @@ final class PanelController {
     private let store: MarkdownStore
     private var pinObserver: Any?
 
-    static let panelContentHeight: CGFloat = 270
+    // 黄金分割：480 / φ ≈ 297（面板宽高比 = φ）
+    static let panelContentHeight: CGFloat = 297
 
     private var isPinned: Bool {
         UserDefaults.standard.bool(forKey: "focusbar.isPinned")
@@ -47,11 +48,15 @@ final class PanelController {
     func handleMouseMoved(to location: NSPoint) {
         guard let screen = NotchHelper.notchScreen else { return }
         let hotArea = NotchHelper.notchRect(for: screen).insetBy(dx: -12, dy: 0).offsetBy(dx: 0, dy: 8)
+        let hasPopover = panelWindow?.childWindows?.isEmpty == false
 
         if hotArea.contains(location) {
             cancelCollapseTimer()
             if !isExpanded { expandPanel() }
         } else if let panelFrame = panelWindow?.frame, panelFrame.contains(location) {
+            cancelCollapseTimer()
+        } else if hasPopover {
+            // popover 弹出时保持面板不收起
             cancelCollapseTimer()
         } else {
             scheduleCollapse()
@@ -71,8 +76,8 @@ final class PanelController {
         let targetRect = NotchHelper.panelRect(for: screen, panelContentHeight: Self.panelContentHeight)
 
         NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.22
-            ctx.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            ctx.duration = 0.28
+            ctx.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1.0, 0.3, 1.0)
             panelWindow?.animator().setFrame(targetRect, display: true)
             panelWindow?.animator().alphaValue = 1
         }

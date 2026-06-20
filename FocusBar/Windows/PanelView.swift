@@ -34,24 +34,9 @@ private struct GlassMaterial: NSViewRepresentable {
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
-// MARK: - Panel shape: square top, rounded bottom
-
-private struct PanelShape: Shape {
-    let radius: CGFloat = 14
-    func path(in rect: CGRect) -> Path {
-        var p = Path()
-        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY))
-        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - radius))
-        p.addQuadCurve(to: CGPoint(x: rect.maxX - radius, y: rect.maxY),
-                       control: CGPoint(x: rect.maxX, y: rect.maxY))
-        p.addLine(to: CGPoint(x: rect.minX + radius, y: rect.maxY))
-        p.addQuadCurve(to: CGPoint(x: rect.minX, y: rect.maxY - radius),
-                       control: CGPoint(x: rect.minX, y: rect.maxY))
-        p.closeSubpath()
-        return p
-    }
-}
+// 黄金分割：W/H = φ ≈ 1.618 → W=480, H=297, r = H/φ⁵ ≈ 27
+private let φ: CGFloat = 1.6180339887
+private let goldenRadius: CGFloat = 297 / (1.6180339887 * 1.6180339887 * 1.6180339887 * 1.6180339887 * 1.6180339887) // ≈ 27
 
 // MARK: - Root Panel
 
@@ -80,7 +65,7 @@ struct PanelView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
             .padding(.horizontal, 14)
-            .padding(.top, 12)
+            .padding(.top, 46)
             .padding(.bottom, 36)
 
             HStack(spacing: 0) {
@@ -112,19 +97,7 @@ struct PanelView: View {
             .padding(.trailing, 10)
             .padding(.bottom, 6)
         }
-        .clipShape(PanelShape())
-        .overlay(alignment: .top) {
-            Rectangle()
-                .fill(
-                    LinearGradient(
-                        colors: [Color.white.opacity(0.35), Color.white.opacity(0.08)],
-                        startPoint: .leading, endPoint: .trailing
-                    )
-                )
-                .frame(height: 0.5)
-        }
-        .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.30).opacity(0.18), radius: 20, x: 0, y: 8)
-        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
+        .clipShape(RoundedRectangle(cornerRadius: goldenRadius, style: .continuous))
         .frame(width: NotchHelper.panelWidth)
     }
 }
@@ -289,11 +262,13 @@ struct FocusItemRow: View {
     var onCancel: () -> Void
     var onDelete: () -> Void
 
-    @State private var editTitle:    String = ""
-    @State private var editStart:    String = ""
-    @State private var editEnd:      String = ""
-    @State private var editProgress: FocusProgress? = nil
-    @State private var editNote:     String = ""
+    @State private var editTitle:     String = ""
+    @State private var editStartDate: Date = Date()
+    @State private var editEndDate:   Date = Date()
+    @State private var editProgress:  FocusProgress? = nil
+    @State private var editNote:      String = ""
+    @State private var showStartPicker = false
+    @State private var showEndPicker   = false
 
     @FocusState private var titleFocused: Bool
 
@@ -407,34 +382,32 @@ struct FocusItemRow: View {
             }
 
             // 时间段
-            HStack(spacing: 4) {
+            HStack(spacing: 5) {
                 Image(systemName: "clock")
                     .font(.system(size: 9))
                     .foregroundStyle(.secondary)
                     .frame(width: 11)
-                TextField("开始", text: $editStart)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .frame(width: 40)
-                    .padding(.vertical, 2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
-                    )
-                Text("~")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                TextField("结束", text: $editEnd)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 11, design: .monospaced))
-                    .multilineTextAlignment(.center)
-                    .frame(width: 40)
-                    .padding(.vertical, 2)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 3)
-                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
-                    )
+                Button(formatTime(editStartDate)) {
+                    showStartPicker = true
+                }
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.primary)
+                .buttonStyle(.plain)
+                .popover(isPresented: $showStartPicker, arrowEdge: .bottom) {
+                    TimeScrollPicker(selection: $editStartDate) { showStartPicker = false }
+                }
+
+                Text("~").font(.system(size: 11)).foregroundStyle(.secondary)
+
+                Button(formatTime(editEndDate)) {
+                    showEndPicker = true
+                }
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.primary)
+                .buttonStyle(.plain)
+                .popover(isPresented: $showEndPicker, arrowEdge: .bottom) {
+                    TimeScrollPicker(selection: $editEndDate) { showEndPicker = false }
+                }
             }
             .padding(.leading, 13)
 
@@ -510,22 +483,49 @@ struct FocusItemRow: View {
     // MARK: Helpers
 
     private func loadEditState() {
-        editTitle    = item.title
-        editStart    = item.timeStart
-        editEnd      = item.timeEnd
-        editProgress = item.progress
-        editNote     = item.note
+        editTitle     = item.title
+        editProgress  = item.progress
+        editNote      = item.note
+        editStartDate = parseTime(item.timeStart) ?? nextHalfHour()
+        editEndDate   = parseTime(item.timeEnd)   ?? nextHalfHour().addingTimeInterval(3600)
     }
 
     private func commitEdit() {
         titleFocused = false
         var updated = item
         updated.title     = editTitle
-        updated.timeStart = editStart.trimmingCharacters(in: .whitespaces)
-        updated.timeEnd   = editEnd.trimmingCharacters(in: .whitespaces)
+        updated.timeStart = formatTime(editStartDate)
+        updated.timeEnd   = formatTime(editEndDate)
         updated.progress  = editProgress
         updated.note      = editNote.trimmingCharacters(in: .whitespaces)
         onUpdate(updated)
+    }
+
+    private func parseTime(_ s: String) -> Date? {
+        guard !s.isEmpty else { return nil }
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return f.date(from: s)
+    }
+
+    private func formatTime(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return f.string(from: d)
+    }
+
+    // 下一个半小时整点：17:10 → 17:30，17:31 → 18:00
+    private func nextHalfHour() -> Date {
+        let cal = Calendar.current
+        var comps = cal.dateComponents([.year, .month, .day, .hour, .minute], from: Date())
+        let min = comps.minute ?? 0
+        let next = (min / 15 + 1) * 15
+        if next < 60 {
+            comps.minute = next
+        } else {
+            comps.hour = (comps.hour ?? 0) + 1
+            comps.minute = 0
+        }
+        comps.second = 0
+        return cal.date(from: comps) ?? Date()
     }
 }
 
@@ -543,6 +543,59 @@ private struct SectionBadge: View {
             .padding(.vertical, 3)
             .background(color.opacity(0.14))
             .clipShape(Capsule())
+    }
+}
+
+// MARK: - Time Scroll Picker
+
+private struct TimeScrollPicker: View {
+    @Binding var selection: Date
+    let onSelect: () -> Void
+
+    private let slots: [Date] = {
+        let base = Calendar.current.startOfDay(for: Date())
+        return (0..<96).map { base.addingTimeInterval(Double($0) * 900) }
+    }()
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView(showsIndicators: false) {
+                VStack(spacing: 0) {
+                    ForEach(Array(slots.enumerated()), id: \.offset) { i, slot in
+                        Button {
+                            selection = slot
+                            onSelect()
+                        } label: {
+                            Text(label(slot))
+                                .font(.system(size: 13, design: .monospaced))
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 7)
+                                .background(isSame(slot, selection) ? DS.coral.opacity(0.85) : Color.clear)
+                                .foregroundStyle(isSame(slot, selection) ? Color.white : Color.primary)
+                        }
+                        .buttonStyle(.plain)
+                        .id(i)
+                    }
+                }
+            }
+            .frame(width: 90, height: 200)
+            .onAppear {
+                let idx = slots.firstIndex(where: { isSame($0, selection) }) ?? 0
+                proxy.scrollTo(max(0, idx - 2), anchor: .top)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func label(_ d: Date) -> String {
+        let f = DateFormatter(); f.dateFormat = "HH:mm"
+        return f.string(from: d)
+    }
+
+    private func isSame(_ a: Date, _ b: Date) -> Bool {
+        let c = Calendar.current
+        return c.component(.hour, from: a) == c.component(.hour, from: b)
+            && c.component(.minute, from: a) == c.component(.minute, from: b)
     }
 }
 

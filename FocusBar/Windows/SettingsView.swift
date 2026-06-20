@@ -1,10 +1,8 @@
 import SwiftUI
 import AppKit
-import Sparkle
 
 struct SettingsView: View {
     @ObservedObject var store: MarkdownStore
-    let updater: SPUUpdater
     @State private var directoryPath: String = ""
 
     var body: some View {
@@ -66,25 +64,6 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
             }
 
-            Divider()
-
-            // 更新
-            VStack(alignment: .leading, spacing: 8) {
-                Label("更新", systemImage: "arrow.down.circle")
-                    .font(.headline)
-
-                HStack {
-                    Button("检查更新…") {
-                        updater.checkForUpdates()
-                    }
-                    .buttonStyle(.bordered)
-
-                    Text("当前版本 v\(appVersion)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-            }
-
             Spacer()
 
             HStack {
@@ -95,7 +74,7 @@ struct SettingsView: View {
             }
         }
         .padding(24)
-        .frame(width: 480, height: 380)
+        .frame(width: 480, height: 320)
         .onAppear { directoryPath = store.storageDirectory.path }
     }
 

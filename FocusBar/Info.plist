@@ -22,15 +22,5 @@
     <string>NSApplication</string>
     <key>NSHumanReadableCopyright</key>
     <string>© 2026 FocusBar</string>
-
-    <!-- Sparkle 自动更新 -->
-    <key>SUPublicEDKey</key>
-    <string>P9NFbfglJhuyt5+Mto/2gHcVDt1WcAO0sLYKcb/qLsc=</string>
-    <key>SUFeedURL</key>
-    <string>https://raw.githubusercontent.com/leoxiewl/FocusBar/main/appcast.xml</string>
-    <key>SUEnableAutomaticChecks</key>
-    <true/>
-    <key>SUScheduledCheckInterval</key>
-    <integer>86400</integer>
 </dict>
 </plist>

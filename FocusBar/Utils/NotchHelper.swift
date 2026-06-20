@@ -13,19 +13,19 @@ struct NotchHelper {
         return CGRect(x: x, y: y, width: notchWidth, height: menuBarH)
     }
 
-    /// 展开状态：紧贴 Notch 下方向下延伸，顶部无空隙
+    /// 展开状态：面板顶边贴屏幕顶部，刘海被包裹在面板内，内容从刘海下方开始
     static func panelRect(for screen: NSScreen, panelContentHeight: CGFloat) -> CGRect {
-        let notchBottomY = notchRect(for: screen).minY   // Notch 底边（屏幕坐标 y 向上）
         let x = screen.frame.midX - panelWidth / 2
-        return CGRect(x: x, y: notchBottomY - panelContentHeight,
+        return CGRect(x: x,
+                      y: screen.frame.maxY - panelContentHeight,
                       width: panelWidth, height: panelContentHeight)
     }
 
-    /// 收起状态：面板隐藏于 Notch 内部（y 向上移，完全遮在 menu bar 后面）
+    /// 收起状态：面板向上滑出屏幕顶部，完全隐藏
     static func hiddenPanelRect(for screen: NSScreen, panelContentHeight: CGFloat) -> CGRect {
-        let notchBottomY = notchRect(for: screen).minY
         let x = screen.frame.midX - panelWidth / 2
-        return CGRect(x: x, y: notchBottomY,
+        return CGRect(x: x,
+                      y: screen.frame.maxY,
                       width: panelWidth, height: panelContentHeight)
     }
 
