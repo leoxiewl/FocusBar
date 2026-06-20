@@ -9,7 +9,7 @@ final class MarkdownStore: ObservableObject {
 
     @Published var todayTasks: [FocusTask] = []
     @Published var weekTasks: [FocusTask] = []
-    @Published var currentFocus: [String] = []
+    @Published var currentFocus: [FocusItem] = []
 
     private(set) var currentDayKey: String = ""
     private(set) var currentWeekKey: String = ""
@@ -77,9 +77,7 @@ final class MarkdownStore: ObservableObject {
     func isFocusBarFile(_ name: String) -> Bool {
         guard name.hasSuffix(".md") else { return false }
         let stem = String(name.dropLast(3))
-        // 日文件：YYYY-MM-DD
         let dayPattern = #"^\d{4}-\d{2}-\d{2}$"#
-        // 周文件：YYYY-Wnn
         let weekPattern = #"^\d{4}-W\d{1,2}$"#
         return stem.range(of: dayPattern, options: .regularExpression) != nil
             || stem.range(of: weekPattern, options: .regularExpression) != nil
@@ -115,14 +113,14 @@ final class MarkdownStore: ObservableObject {
 
     private enum Section { case none, focus, todayTasks, weekTasks }
 
-    private func parseDayFile(key: String) -> (tasks: [FocusTask], focus: [String]) {
+    private func parseDayFile(key: String) -> (tasks: [FocusTask], focus: [FocusItem]) {
         let url = dayFile(key: key)
         guard let raw = try? String(contentsOf: url, encoding: .utf8) else {
             return ([], [])
         }
 
         var tasks: [FocusTask] = []
-        var focus: [String]   = []
+        var focus: [FocusItem] = []
         var section = Section.none
 
         for line in raw.components(separatedBy: "\n") {
@@ -133,7 +131,7 @@ final class MarkdownStore: ObservableObject {
                 let body = String(t.dropFirst(2))
                 switch section {
                 case .focus:
-                    if !body.isEmpty { focus.append(body) }
+                    if !body.isEmpty { focus.append(FocusItem.parse(from: body)) }
                 case .todayTasks:
                     if let task = parseCheckboxLine(body, type: .todayTop) { tasks.append(task) }
                 default: break
@@ -183,7 +181,13 @@ final class MarkdownStore: ObservableObject {
         lines.append("")
 
         lines.append("## 🔴 现在正在做")
-        currentFocus.filter { !$0.isEmpty }.forEach { lines.append("- \($0)") }
+        for item in currentFocus where !item.title.isEmpty {
+            var parts: [String] = [item.title]
+            if !item.timeRangeToken.isEmpty { parts.append(item.timeRangeToken) }
+            if let p = item.progress         { parts.append(p.markdownToken) }
+            if !item.note.isEmpty            { parts.append(item.note) }
+            lines.append("- " + parts.joined(separator: " | "))
+        }
         lines.append("")
 
         lines.append("## 📅 今日重要三件事")
@@ -270,25 +274,26 @@ final class MarkdownStore: ObservableObject {
 
     // MARK: - Current Focus
 
-    func addFocus(_ text: String = "") {
-        currentFocus.append(text)
+    func addFocus() {
+        currentFocus.append(FocusItem(title: ""))
         saveDayFile()
     }
 
-    func updateFocus(at index: Int, text: String) {
-        guard currentFocus.indices.contains(index) else { return }
-        let trimmed = text.trimmingCharacters(in: .whitespaces)
+    func updateFocus(item: FocusItem) {
+        guard let idx = currentFocus.firstIndex(where: { $0.id == item.id }) else { return }
+        let trimmed = item.title.trimmingCharacters(in: .whitespaces)
         if trimmed.isEmpty {
-            currentFocus.remove(at: index)
+            currentFocus.remove(at: idx)
         } else {
-            currentFocus[index] = trimmed
+            var updated = item
+            updated.title = trimmed
+            currentFocus[idx] = updated
         }
         saveDayFile()
     }
 
-    func removeFocus(at index: Int) {
-        guard currentFocus.indices.contains(index) else { return }
-        currentFocus.remove(at: index)
+    func removeFocus(item: FocusItem) {
+        currentFocus.removeAll { $0.id == item.id }
         saveDayFile()
     }
 

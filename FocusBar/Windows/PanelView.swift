@@ -11,13 +11,14 @@ extension Notification.Name {
 // MARK: - Design tokens
 
 private enum DS {
-    // 分区主色
-    static let blue   = Color(red: 0.28, green: 0.62, blue: 1.00)   // 本周 #47A0FF
-    static let amber  = Color(red: 1.00, green: 0.72, blue: 0.20)   // 今日 #FFB833
-    static let coral  = Color(red: 1.00, green: 0.36, blue: 0.36)   // 正在做 #FF5C5C
+    static let blue   = Color(red: 0.28, green: 0.62, blue: 1.00)
+    static let amber  = Color(red: 1.00, green: 0.72, blue: 0.20)
+    static let coral  = Color(red: 0.85, green: 0.35, blue: 0.19)   // #D85A30
 
-    // 面板顶部渐变色带（深蓝）
-    static let topGrad = Color(red: 0.12, green: 0.35, blue: 0.82)  // #1F59D1
+    static let green  = Color(red: 0.11, green: 0.62, blue: 0.46)   // #1D9E75 已完成
+    static let orange = Color(red: 0.94, green: 0.62, blue: 0.15)   // #EF9F27 进行中
+
+    static let topGrad = Color(red: 0.12, green: 0.35, blue: 0.82)
 }
 
 // MARK: - NSVisualEffectView glass
@@ -25,7 +26,7 @@ private enum DS {
 private struct GlassMaterial: NSViewRepresentable {
     func makeNSView(context: Context) -> NSVisualEffectView {
         let v = NSVisualEffectView()
-        v.material = .sidebar
+        v.material = .popover
         v.blendingMode = .behindWindow
         v.state = .active
         return v
@@ -61,21 +62,11 @@ struct PanelView: View {
     var body: some View {
         ZStack(alignment: .bottomTrailing) {
 
-            // 1. 原生玻璃模糊
             GlassMaterial()
 
-            // 2. 蓝色渐变色带：顶部浓→底部淡，给面板视觉重量
-            LinearGradient(
-                stops: [
-                    .init(color: DS.topGrad.opacity(0.28), location: 0.0),
-                    .init(color: DS.topGrad.opacity(0.08), location: 0.45),
-                    .init(color: .clear, location: 1.0)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
+            // 暖米色叠层，营造示意图中的米白暖调
+            Color(red: 0.96, green: 0.93, blue: 0.88).opacity(0.72)
 
-            // 3. 内容
             HStack(alignment: .top, spacing: 0) {
                 LeftColumnView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -92,7 +83,6 @@ struct PanelView: View {
             .padding(.top, 12)
             .padding(.bottom, 36)
 
-            // 4. 底部操作按钮（pin + 齿轮）
             HStack(spacing: 0) {
                 Button {
                     isPinned.toggle()
@@ -123,7 +113,6 @@ struct PanelView: View {
             .padding(.bottom, 6)
         }
         .clipShape(PanelShape())
-        // 顶部亮边（蓝白渐变），底部无边框
         .overlay(alignment: .top) {
             Rectangle()
                 .fill(
@@ -134,8 +123,8 @@ struct PanelView: View {
                 )
                 .frame(height: 0.5)
         }
-        .shadow(color: DS.topGrad.opacity(0.30), radius: 20, x: 0, y: 8)
-        .shadow(color: .black.opacity(0.18), radius: 8, x: 0, y: 4)
+        .shadow(color: Color(red: 0.60, green: 0.45, blue: 0.30).opacity(0.18), radius: 20, x: 0, y: 8)
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 4)
         .frame(width: NotchHelper.panelWidth)
     }
 }
@@ -191,7 +180,7 @@ struct LeftColumnView: View {
 
 struct RightColumnView: View {
     @EnvironmentObject var store: MarkdownStore
-    @State private var editingIndex: Int? = nil
+    @State private var editingID: UUID? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -199,25 +188,26 @@ struct RightColumnView: View {
             SectionBadge(label: "正在做", color: DS.coral)
             Spacer().frame(height: 8)
 
-            ForEach(Array(store.currentFocus.enumerated()), id: \.offset) { index, text in
+            ForEach(store.currentFocus) { item in
                 FocusItemRow(
-                    text: text,
-                    isEditing: editingIndex == index,
-                    onTap: { editingIndex = index },
-                    onUpdate: { newText in
-                        store.updateFocus(at: index, text: newText)
-                        editingIndex = nil
+                    item: item,
+                    isEditing: editingID == item.id,
+                    onTap: { editingID = item.id },
+                    onUpdate: { updated in
+                        store.updateFocus(item: updated)
+                        editingID = nil
                     },
+                    onCancel: { editingID = nil },
                     onDelete: {
-                        store.removeFocus(at: index)
-                        editingIndex = nil
+                        store.removeFocus(item: item)
+                        editingID = nil
                     }
                 )
             }
 
             Button {
                 store.addFocus()
-                DispatchQueue.main.async { editingIndex = store.currentFocus.count - 1 }
+                DispatchQueue.main.async { editingID = store.currentFocus.last?.id }
             } label: {
                 HStack(spacing: 4) {
                     Image(systemName: "plus").font(.system(size: 10))
@@ -292,53 +282,251 @@ struct TaskRowView: View {
 // MARK: - Focus Item Row
 
 struct FocusItemRow: View {
-    let text: String
+    let item: FocusItem
     let isEditing: Bool
     var onTap: () -> Void
-    var onUpdate: (String) -> Void
+    var onUpdate: (FocusItem) -> Void
+    var onCancel: () -> Void
     var onDelete: () -> Void
 
-    @State private var editText = ""
-    @FocusState private var isFocused: Bool
+    @State private var editTitle:    String = ""
+    @State private var editStart:    String = ""
+    @State private var editEnd:      String = ""
+    @State private var editProgress: FocusProgress? = nil
+    @State private var editNote:     String = ""
+
+    @FocusState private var titleFocused: Bool
 
     var body: some View {
-        HStack(spacing: 7) {
-            // 亮色大圆点，更显眼
-            Circle()
-                .fill(DS.coral)
-                .frame(width: 7, height: 7)
-                .shadow(color: DS.coral.opacity(0.6), radius: 3)
-
+        Group {
             if isEditing {
-                TextField("", text: $editText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 13))
-                    .focused($isFocused)
-                    .onSubmit { commit() }
-                    .onExitCommand { cancel() }
-                    .onChange(of: isFocused) { focused in
-                        if !focused { commit() }
-                    }
-                    .onAppear {
-                        editText = text
-                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { isFocused = true }
-                    }
+                editView
             } else {
-                Text(text.isEmpty ? "点击输入…" : text)
-                    .font(.system(size: 13))
-                    .foregroundStyle(text.isEmpty ? Color.secondary : Color.primary)
-                    .opacity(text.isEmpty ? 0.3 : 1)
-                    .lineLimit(1)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .contentShape(Rectangle())
-                    .onTapGesture { onTap() }
+                displayView
             }
         }
-        .frame(height: 26)
+        .onChange(of: isEditing) { editing in
+            if editing { loadEditState() }
+        }
     }
 
-    private func commit() { isFocused = false; onUpdate(editText) }
-    private func cancel()  { isFocused = false; onUpdate(text) }
+    // MARK: Display Mode
+
+    private var displayView: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(dotColor)
+                    .frame(width: 7, height: 7)
+
+                Text(item.title.isEmpty ? "点击输入…" : item.title)
+                    .font(.system(size: 13))
+                    .foregroundStyle(item.title.isEmpty ? Color.secondary.opacity(0.4) : Color.primary)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            if hasMetadata {
+                HStack(spacing: 5) {
+                    if !item.timeRangeToken.isEmpty {
+                        HStack(spacing: 3) {
+                            Image(systemName: "clock")
+                                .font(.system(size: 9))
+                                .foregroundStyle(.secondary)
+                            Text(item.timeRangeToken)
+                                .font(.system(size: 10))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let prog = item.progress {
+                        progressBadge(prog)
+                    }
+                    if !item.note.isEmpty {
+                        Text(item.note)
+                            .font(.system(size: 10))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                    }
+                }
+                .padding(.leading, 13)
+            }
+        }
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .onTapGesture { onTap() }
+    }
+
+    private var hasMetadata: Bool {
+        !item.timeRangeToken.isEmpty || item.progress != nil || !item.note.isEmpty
+    }
+
+    private var dotColor: Color {
+        switch item.progress {
+        case .completed:             return DS.green
+        case .percent(let v) where v > 0: return DS.orange
+        default:                     return DS.coral
+        }
+    }
+
+    @ViewBuilder
+    private func progressBadge(_ prog: FocusProgress) -> some View {
+        let (label, fg, bg): (String, Color, Color) = {
+            switch prog {
+            case .completed:
+                return ("已完成", DS.green, DS.green.opacity(0.15))
+            case .percent(let v):
+                return ("\(v)%", DS.orange, DS.orange.opacity(0.15))
+            }
+        }()
+        Text(label)
+            .font(.system(size: 9, weight: .medium))
+            .foregroundStyle(fg)
+            .padding(.horizontal, 5)
+            .padding(.vertical, 1)
+            .background(bg)
+            .clipShape(Capsule())
+    }
+
+    // MARK: Edit Mode
+
+    private var editView: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            // 标题
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(DS.coral)
+                    .frame(width: 7, height: 7)
+                TextField("任务标题", text: $editTitle)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 13))
+                    .focused($titleFocused)
+                    .onSubmit { commitEdit() }
+                    .onExitCommand { onCancel() }
+            }
+
+            // 时间段
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11)
+                TextField("开始", text: $editStart)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .multilineTextAlignment(.center)
+                    .frame(width: 40)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
+                    )
+                Text("~")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                TextField("结束", text: $editEnd)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11, design: .monospaced))
+                    .multilineTextAlignment(.center)
+                    .frame(width: 40)
+                    .padding(.vertical, 2)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color.secondary.opacity(0.3), lineWidth: 0.5)
+                    )
+            }
+            .padding(.leading, 13)
+
+            // 进度按钮
+            HStack(spacing: 4) {
+                ForEach([0, 25, 50, 75], id: \.self) { pct in
+                    progressToggleBtn(label: "\(pct)%", value: .percent(pct))
+                }
+                progressToggleBtn(label: "已完成", value: .completed)
+            }
+            .padding(.leading, 13)
+
+            // 备注
+            HStack(spacing: 4) {
+                Image(systemName: "note.text")
+                    .font(.system(size: 9))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 11)
+                TextField("备注", text: $editNote)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 11))
+                    .onSubmit { commitEdit() }
+            }
+            .padding(.leading, 13)
+
+            // 操作按钮
+            HStack {
+                Button("删除") { onDelete() }
+                    .font(.system(size: 10))
+                    .foregroundStyle(Color.red.opacity(0.75))
+                    .buttonStyle(.plain)
+                Spacer()
+                Button("取消") { onCancel() }
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .buttonStyle(.plain)
+                Button("确认") { commitEdit() }
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(DS.coral)
+                    .buttonStyle(.plain)
+                    .padding(.leading, 8)
+            }
+            .padding(.leading, 13)
+            .padding(.top, 1)
+        }
+        .padding(.vertical, 5)
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { titleFocused = true }
+        }
+    }
+
+    @ViewBuilder
+    private func progressToggleBtn(label: String, value: FocusProgress) -> some View {
+        let isSelected = editProgress == value
+        Button {
+            editProgress = isSelected ? nil : value
+        } label: {
+            Text(label)
+                .font(.system(size: 9, weight: isSelected ? .medium : .regular))
+                .foregroundStyle(isSelected ? DS.coral : Color.secondary)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(isSelected ? DS.coral.opacity(0.14) : Color.secondary.opacity(0.08))
+                .clipShape(Capsule())
+                .overlay(
+                    Capsule()
+                        .stroke(isSelected ? DS.coral.opacity(0.4) : Color.clear, lineWidth: 0.5)
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Helpers
+
+    private func loadEditState() {
+        editTitle    = item.title
+        editStart    = item.timeStart
+        editEnd      = item.timeEnd
+        editProgress = item.progress
+        editNote     = item.note
+    }
+
+    private func commitEdit() {
+        titleFocused = false
+        var updated = item
+        updated.title     = editTitle
+        updated.timeStart = editStart.trimmingCharacters(in: .whitespaces)
+        updated.timeEnd   = editEnd.trimmingCharacters(in: .whitespaces)
+        updated.progress  = editProgress
+        updated.note      = editNote.trimmingCharacters(in: .whitespaces)
+        onUpdate(updated)
+    }
 }
 
 // MARK: - Section Badge
