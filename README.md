@@ -43,7 +43,10 @@ Hover over the notch → a glass panel slides down showing everything you need t
 2. Unzip and move **FocusBar.app** into your Applications folder
 3. Launch FocusBar — it appears in the notch area automatically
 
-> On first launch macOS may prompt you to allow the app in **System Settings → Privacy & Security**.
+> **First launch:** macOS will block the app because it's unsigned. Right-click **FocusBar.app → Open** and confirm, or run:
+> ```bash
+> xattr -dr com.apple.quarantine /Applications/FocusBar.app
+> ```
 
 ### Option B — Build from source
 
