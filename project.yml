@@ -1,0 +1,35 @@
+name: FocusBar
+
+options:
+  bundleIdPrefix: com.focusbar
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "16.0"
+  generateEmptyDirectories: true
+
+targets:
+  FocusBar:
+    type: application
+    platform: macOS
+    sources:
+      - path: FocusBar
+        excludes:
+          - "**/*.md"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.focusbar.app
+        MARKETING_VERSION: "1.0.0"
+        CURRENT_PROJECT_VERSION: "1"
+        SWIFT_VERSION: "5.9"
+        MACOSX_DEPLOYMENT_TARGET: "13.0"
+        INFOPLIST_FILE: FocusBar/Info.plist
+        CODE_SIGN_ENTITLEMENTS: FocusBar/FocusBar.entitlements
+        CODE_SIGN_STYLE: Automatic
+        ENABLE_HARDENED_RUNTIME: YES
+        ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES: YES
+      configs:
+        Debug:
+          SWIFT_OPTIMIZATION_LEVEL: "-Onone"
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        Release:
+          SWIFT_OPTIMIZATION_LEVEL: "-O"
